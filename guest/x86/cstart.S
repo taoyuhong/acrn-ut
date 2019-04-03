@@ -48,6 +48,7 @@ gdt32:
 	.quad 0
 	.quad 0
 
+.globl tss_descr
 tss_descr:
         .rept max_cpus
         .quad 0x000089000000ffff // 32-bit avail tss
