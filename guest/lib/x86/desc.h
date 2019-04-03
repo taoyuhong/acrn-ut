@@ -146,9 +146,9 @@ typedef struct {
     unsigned short offset0;
     unsigned short selector;
     unsigned short ist : 3;
-    unsigned short : 5;
+    unsigned short b5: 5;
     unsigned short type : 4;
-    unsigned short : 1;
+    unsigned short system: 1;
     unsigned short dpl : 2;
     unsigned short p : 1;
     unsigned short offset1;
