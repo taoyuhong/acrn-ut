@@ -475,4 +475,6 @@ static inline void set_bit(int bit, u8 *addr)
 			     : "+m" (*addr) : "Ir" (bit) : "cc", "memory");
 }
 
+int do_ring3(void (*fn)(const char *), const char *arg);
+void init_do_ring3(void);
 #endif
