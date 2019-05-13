@@ -167,6 +167,18 @@ typedef struct {
 	u8 base_high;
 } gdt_entry_t;
 
+typedef struct {
+	u16 offset_low;
+	u16 selector;
+	u16 par_cunt :5;
+	u16 reserve :3;
+	u16 type :4;
+	u16 system :1;
+	u16 dpl :2;
+	u16 p :1;
+	u16 offset_high;
+} call_gate_t;
+
 struct segment_desc64 {
 	uint16_t limit1;
 	uint16_t base1;
