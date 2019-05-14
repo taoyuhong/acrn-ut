@@ -18,7 +18,7 @@ int main(int ac, char **av)
 {
 	printf("Hello, World!\n");
 	setup_idt();
-	init_do_ring3();
-	do_ring3(test_func, "hahahaha");
+	init_do_less_privilege();
+	do_less_privilege(test_func, "hahahaha", 3);
 	return 0;
 }
