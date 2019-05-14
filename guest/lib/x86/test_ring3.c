@@ -5,10 +5,28 @@
 
 /* The ugly mode switching code */
 
-int do_ring3(void (*fn)(const char *), const char *arg)
+int do_less_privilege(void (*fn)(const char *), const char *arg, int rpl)
 {
     static unsigned char user_stack[4096];
     int ret;
+    int cpl = read_cs() & 0x3;
+    u16 user_ds = USER_DS;
+    u16 user_cs = USER_CS;
+
+    if ((rpl <= cpl) || (rpl > 3)) {
+        printf("error: %s rpl:%d cpl:%d\n", __FUNCTION__, rpl, cpl);
+        return -1;
+    }
+
+    user_ds &= ~0x3;
+    user_ds |= rpl;
+    user_cs &= ~0x3;
+    user_cs |= rpl;
+
+    gdt32[USER_DS >>3].access &= 0x9f;
+    gdt32[USER_DS >>3].access |= rpl <<5;
+    gdt32[USER_CS >>3].access &= 0x9f;
+    gdt32[USER_CS >>3].access |= rpl <<5;
 
     asm volatile ("mov %[user_ds], %%" R "dx\n\t"
 		  "mov %%dx, %%ds\n\t"
@@ -49,8 +67,8 @@ int do_ring3(void (*fn)(const char *), const char *arg)
 		  ".section .text\n\t"
 		  "1:\n\t"
 		  : [ret] "=&a" (ret)
-		  : [user_ds] "i" (USER_DS),
-		    [user_cs] "i" (USER_CS),
+		  : [user_ds] "m" (user_ds),
+		    [user_cs] "m" (user_cs),
 		    [user_stack_top]"m"(user_stack[sizeof user_stack]),
 		    [fn]"r"(fn),
 		    [arg]"D"(arg),
@@ -60,7 +78,7 @@ int do_ring3(void (*fn)(const char *), const char *arg)
     return ret;
 }
 
-void init_do_ring3(void)
+void init_do_less_privilege(void)
 {
     extern unsigned char kernel_entry;
 
