@@ -167,6 +167,10 @@ typedef struct {
 	u8 base_high;
 } gdt_entry_t;
 
+#ifdef __x86_64__
+extern gdt_entry_t gdt64[];
+#endif
+
 struct segment_desc64 {
 	uint16_t limit1;
 	uint16_t base1;

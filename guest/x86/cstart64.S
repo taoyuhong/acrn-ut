@@ -54,6 +54,7 @@ gdt64_desc:
 	.word gdt64_end - gdt64 - 1
 	.quad gdt64
 
+.globl gdt64
 gdt64:
 	.quad 0
 	.quad 0x00af9b000000ffff // 64-bit code segment

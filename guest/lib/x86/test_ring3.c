@@ -23,10 +23,11 @@ int do_less_privilege(void (*fn)(const char *), const char *arg, int rpl)
     user_cs &= ~0x3;
     user_cs |= rpl;
 
-    gdt32[USER_DS >>3].access &= 0x9f;
-    gdt32[USER_DS >>3].access |= rpl <<5;
-    gdt32[USER_CS >>3].access &= 0x9f;
-    gdt32[USER_CS >>3].access |= rpl <<5;
+
+    gdt64[USER_DS >>3].access &= 0x9f;
+    gdt64[USER_DS >>3].access |= rpl <<5;
+    gdt64[USER_CS >>3].access &= 0x9f;
+    gdt64[USER_CS >>3].access |= rpl <<5;
 
     asm volatile ("mov %[user_ds], %%" R "dx\n\t"
 		  "mov %%dx, %%ds\n\t"
