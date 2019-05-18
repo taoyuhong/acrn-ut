@@ -10,6 +10,7 @@
 #include "vmalloc.h"
 #include "alloc.h"
 #include "processor.h"
+#include "vm.h"
 
 #define TASK_GATE		(FIRST_SPARE_SEL + 8)
 #define TARGET_TSS		(FIRST_SPARE_SEL + 16)
@@ -220,10 +221,43 @@ void cond_11_desc_tss_base(int violation)
 /* cond 12 */
 void cond_12_desc_tss_readonly(int violation)
 {
+	u32 tss_addr;
+	u32 page_addr;
+	u32 page_off;
+	//tss32_t *readonly_tss;
+	//tss32_t *target_tss;
+
 	dbg_printf("%s\n", __FUNCTION__);
+#define RD_ONLY_TSS_PAGE	(ERROR_ADDR + 0x1000)
 
 	if (violation) {
-		desc_target->type |= 0x2;
+		tss_addr = (desc_target->base_high <<24) +
+				(desc_target->base_middle <<16) +
+				desc_target->base_low;
+
+		page_addr = tss_addr & (~0xfff);
+		page_off = tss_addr & 0xfff;
+
+		dbg_printf("tss_addr:%x size:%x page:%x off:%x\n", tss_addr, sizeof(tss), page_addr, page_off);
+
+		install_read_only_page(phys_to_virt(read_cr3()), page_addr, (void*)RD_ONLY_TSS_PAGE);
+		desc_target->base_low = (RD_ONLY_TSS_PAGE + page_off) & 0xffff;
+		desc_target->base_middle = ((RD_ONLY_TSS_PAGE + page_off) >>16) & 0xff;
+		desc_target->base_high = ((RD_ONLY_TSS_PAGE + page_off) >>24) & 0xff;
+
+		//readonly_tss = (void*)(RD_ONLY_TSS_PAGE + page_off);
+		//target_tss = (void*)tss_addr;
+
+		/* should #pF */
+		//rip_skip = 7;
+		//readonly_tss->ss0 = 0x11;
+
+		dbg_printf("ss0: %x %x\n"
+			"ss1: %x %x\n"
+			"ss2: %x %x\n",
+			readonly_tss->ss0, target_tss->ss0,
+			readonly_tss->ss1, target_tss->ss1,
+			readonly_tss->ss2, target_tss->ss2);
 	}
 }
 
@@ -318,5 +352,12 @@ int main(int ac, char **av)
 		test_cond(vmap);
 	}
 
+/*
+	for (vmap = 0x0;vmap < NCOND;vmap ++) {
+		reset_gate();
+		reset_desc();
+		test_cond(0x1<<vmap);
+	}
+*/
 	return 0;
 }
