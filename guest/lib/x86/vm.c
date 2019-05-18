@@ -100,6 +100,11 @@ pteval_t *install_page(pgd_t *cr3, phys_addr_t phys, void *virt)
     return install_pte(cr3, 1, virt, phys | PT_PRESENT_MASK | PT_WRITABLE_MASK | PT_USER_MASK, 0);
 }
 
+pteval_t *install_read_only_page(pgd_t *cr3, phys_addr_t phys, void *virt)
+{
+    return install_pte(cr3, 1, virt, phys | PT_PRESENT_MASK | PT_USER_MASK, 0);
+}
+
 void install_pages(pgd_t *cr3, phys_addr_t phys, size_t len, void *virt)
 {
 	phys_addr_t max = (u64)len + (u64)phys;

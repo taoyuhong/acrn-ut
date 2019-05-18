@@ -33,7 +33,7 @@ pteval_t *install_pte(pgd_t *cr3,
 		      void *virt,
 		      pteval_t pte,
 		      pteval_t *pt_page);
-
+pteval_t *install_read_only_page(pgd_t *cr3, phys_addr_t phys, void *virt);
 pteval_t *install_large_page(pgd_t *cr3, phys_addr_t phys, void *virt);
 void install_pages(pgd_t *cr3, phys_addr_t phys, size_t len, void *virt);
 bool any_present_pages(pgd_t *cr3, void *virt, size_t len);
