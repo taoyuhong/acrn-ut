@@ -7,7 +7,7 @@ cflatobjs += lib/x86/setjmp32.o
 tests = $(TEST_DIR)/taskswitch.flat $(TEST_DIR)/taskswitch2.flat \
 	$(TEST_DIR)/cmpxchg8b.flat $(TEST_DIR)/taskswitch_call_gate.flat \
 	$(TEST_DIR)/taskswitch_call_desc.flat \
-	$(TEST_DIR)/taskswitch_intr.flat
+	$(TEST_DIR)/taskswitch_intr.flat $(TEST_DIR)/taskswitch_iret_desc.flat
 
 
 include $(SRCDIR)/$(TEST_DIR)/Makefile.common

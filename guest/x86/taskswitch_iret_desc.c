@@ -1,0 +1,275 @@
+/*
+ * Copyright 2010 Siemens AG
+ * Author: Jan Kiszka
+ *
+ * Released under GPLv2.
+ */
+
+#include "libcflat.h"
+#include "x86/desc.h"
+#include "vmalloc.h"
+#include "alloc.h"
+#include "processor.h"
+
+#define TARGET_TSS		(FIRST_SPARE_SEL + 16)
+#define ERROR_ADDR	0x5fff0000
+
+struct tss_desc {
+        u16 limit_low;
+        u16 base_low;
+        u8 base_middle;
+        u8 type :4;
+        u8 system :1;
+        u8 dpl :2;
+        u8 p :1;
+        u8 granularity;
+        u8 base_high;
+	u32 base_ext;
+        u32 rev0 :8;
+        u32 z5 :5;
+        u32 rev1 :19;
+}
+  *desc_main = (void*)&gdt64[TSS_MAIN >>3],
+  *desc_target = (void*)&gdt64[TARGET_TSS >>3];
+
+struct tss_desc desc_intr_backup, desc_cur_backup;
+ 
+//#define dbg_printf(...)	printf(__VA_ARGS__)
+#define dbg_printf(...)
+
+static unsigned long rip_skip = 0;
+
+void gp_handler(struct ex_regs *regs)
+{
+	dbg_printf("rip->(%lx + %lx)! ", regs->rip, rip_skip);
+	regs->rip += rip_skip;
+	rip_skip = 0;
+
+	if ((regs->error_code & 0xf000) && ((regs->error_code & 0xfff) == TARGET_TSS))
+		printf("#GP(%lx)<-HV\n", regs->error_code & 0x0fff);
+	else
+		printf("#GP(%lx)\n", regs->error_code);
+}
+
+void np_handler(struct ex_regs *regs)
+{
+	regs->rip += rip_skip;
+	rip_skip = 0;
+	printf("#NP(%lx)\n", regs->error_code);
+}
+
+void pf_handler(struct ex_regs *regs)
+{
+	regs->rip += rip_skip;
+	rip_skip = 0;
+	printf("#PF(%lx)\n", read_cr2());
+}
+
+void ts_handler(struct ex_regs *regs)
+{
+	dbg_printf("rip->(%lx + %lx)! ", regs->rip, rip_skip);
+	regs->rip += rip_skip;
+	rip_skip = 0;
+	printf("#TS(%lx)\n", regs->error_code);
+}
+
+/* conditions, 0:false 1:tr */
+
+void reset_desc(void)
+{
+	*desc_target = *desc_main;
+	desc_target->dpl = 2;
+
+	desc_main->base_low = desc_cur_backup.base_low;
+	desc_main->base_middle = desc_cur_backup.base_middle;
+	desc_main->base_high = desc_cur_backup.base_high;
+	desc_main->base_ext = desc_cur_backup.base_ext;
+
+}
+
+/* cond 0 */
+void cond_0_sel_null(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation) {
+		//tss.prev = 0;
+	}
+}
+
+/* cond 1 */
+void cond_1_sel_ti(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	//if (violation)
+		//tss.prev = (TARGET_TSS | 0x4);
+}
+
+/* cond 2 */
+void cond_2_tss_type(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation)
+		desc_target->type = 0;
+}
+
+/* cond 3 */
+void cond_3_tss_present(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation)
+		desc_target->p = 0;
+}
+
+/* cound 4 */
+void cond_4_tss_bit_22_21(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation)
+		desc_target->granularity |= 0x60;
+}
+
+/* cond 5 */
+void cond_5_tss_g_limit(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation) {
+		desc_target->granularity &= 0x70;
+		desc_target->limit_low = 0x66;
+	}
+}
+
+/* cond 6 */
+void cond_6_tss_busy(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation)
+		desc_target->type |= 0x2;
+}
+
+/* cond 7 */
+void cond_7_tss_base(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation) {
+		desc_target->base_low = ERROR_ADDR & 0xffff;
+		desc_target->base_middle = (ERROR_ADDR >> 16) & 0xff;
+		desc_target->base_high = (ERROR_ADDR >> 24) & 0xff;
+	}
+}
+
+/* cond 8 */
+void cond_8_tss_readonly(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation) {
+		//desc_target->type |= 0x2;
+	}
+}
+
+/* cond 9 */
+void cond_9_cur_base(int violation)
+{
+	dbg_printf("%s\n", __FUNCTION__);
+
+	if (violation) {
+		desc_main->base_low = ERROR_ADDR & 0xffff;
+		desc_main->base_middle = (ERROR_ADDR >> 16) & 0xff;
+		desc_main->base_high = (ERROR_ADDR >> 24) & 0xff;
+	}
+}
+
+void (*cond_funs[])(int) = {
+	cond_0_sel_null,
+	cond_1_sel_ti,
+	cond_2_tss_type,
+	cond_3_tss_present,
+	cond_4_tss_bit_22_21,
+	cond_5_tss_g_limit,
+	cond_6_tss_busy,
+	cond_7_tss_base,
+	cond_8_tss_readonly,
+	cond_9_cur_base,
+};
+
+#define NCOND	(sizeof(cond_funs)/sizeof(void (*)(int)))
+
+void set_violation_map(u32 vmap)
+{
+	int i;
+
+	for (i = 0; i < NCOND; i++) {
+		if ((vmap >> i) & 0x1)
+			cond_funs[i](1);
+	}
+
+	for (i = 0; i < NCOND; i++) {
+		if ((vmap >> i) & 0x1) {
+			printf("1 ");
+		} else
+			printf("0 ");
+	}
+}
+
+void iret_task_desc(const char *arg)
+{
+	extern void iret_start(void);
+	extern void iret_end(void);
+	u64 rflags = read_rflags();
+
+	write_rflags(rflags | X86_EFLAGS_NT);
+
+	dbg_printf("%s CS:%x\n", __FUNCTION__, read_cs());
+
+	rip_skip = iret_end - iret_start;
+	asm volatile ("iret_start:\n"
+			"	iret\n"
+			"iret_end:\n");
+
+	rflags = read_rflags();
+	write_rflags(rflags & (~X86_EFLAGS_NT));
+}
+
+void test_cond(u32 vmap)
+{
+	set_violation_map(vmap);
+
+	do_less_privilege(iret_task_desc, NULL, 2);
+}
+
+int main(int ac, char **av)
+{
+	u32 vmap = 0;
+
+	setup_vm();
+	setup_idt();
+	init_do_less_privilege();
+
+	handle_exception(13, gp_handler);
+	handle_exception(14, pf_handler);
+	handle_exception(10, ts_handler);
+	handle_exception(11, np_handler);
+
+	desc_cur_backup = *desc_main;
+/*
+	for (vmap = 0x0; vmap <  (0x1 <<NCOND); vmap ++) {
+		reset_desc();
+		test_cond(vmap);
+	}
+*/
+
+	for (vmap = 0x0; vmap < NCOND; vmap ++) {
+		reset_desc();
+		test_cond(0x1 << vmap);
+	}
+
+	return 0;
+}

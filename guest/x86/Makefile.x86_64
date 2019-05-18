@@ -20,7 +20,7 @@ tests += $(TEST_DIR)/tscdeadline_latency.flat
 tests += $(TEST_DIR)/intel-iommu.flat
 tests += $(TEST_DIR)/vmware_backdoors.flat $(TEST_DIR)/taskswitch_call_gate.flat
 tests += $(TEST_DIR)/taskswitch_call_desc.flat
-tests += $(TEST_DIR)/taskswitch_intr.flat
+tests += $(TEST_DIR)/taskswitch_intr.flat $(TEST_DIR)/taskswitch_iret_desc.flat
 
 include $(SRCDIR)/$(TEST_DIR)/Makefile.common
 
