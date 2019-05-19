@@ -10,6 +10,7 @@
 #include "vmalloc.h"
 #include "alloc.h"
 #include "processor.h"
+#include "vm.h"
 
 #define TARGET_TSS		(FIRST_SPARE_SEL + 16)
 #define ERROR_ADDR	0x5fff0000
@@ -165,11 +166,29 @@ void cond_7_tss_base(int violation)
 /* cond 8 */
 void cond_8_tss_readonly(int violation)
 {
+	u32 tss_addr;
+	u32 page_addr;
+	u32 page_off;
+
 	dbg_printf("%s\n", __FUNCTION__);
 
-	if (violation) {
-		//desc_target->type |= 0x2;
-	}
+        if (violation) {
+                tss_addr = (desc_target->base_high <<24) +
+                                (desc_target->base_middle <<16) +
+                                desc_target->base_low;
+
+                page_addr = tss_addr & (~0xfff);
+                page_off = tss_addr & 0xfff;
+
+#define RD_ONLY_PAGE        (ERROR_ADDR + 0x1000)
+                install_read_only_page(phys_to_virt(read_cr3()),
+                                        page_addr, (void*)RD_ONLY_PAGE);
+
+                desc_target->base_low = (RD_ONLY_PAGE + page_off) & 0xffff;
+                desc_target->base_middle = ((RD_ONLY_PAGE + page_off) >>16) & 0xff;
+                desc_target->base_high = ((RD_ONLY_PAGE + page_off) >>24) & 0xff;
+        }
+
 }
 
 /* cond 9 */
