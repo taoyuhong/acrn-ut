@@ -11,6 +11,7 @@
 #include "alloc.h"
 #include "processor.h"
 #include "vm.h"
+#include "alloc_page.h"
 
 #define TASK_GATE		(FIRST_SPARE_SEL + 8)
 #define TARGET_TSS		(FIRST_SPARE_SEL + 16)
@@ -26,9 +27,9 @@ struct tss_desc {
         u8 p :1;
         u8 granularity;
         u8 base_high;
-} *desc_intr = (void*)&gdt32[TSS_INTR >>3],
-  *desc_main = (void*)&gdt32[TSS_MAIN >>3],
-  *desc_target = (void*)&gdt32[TARGET_TSS >>3];
+} *desc_intr = NULL,
+  *desc_main = NULL,
+  *desc_target = NULL;
 
 struct tss_desc desc_intr_backup, desc_cur_backup;
 
@@ -41,10 +42,10 @@ struct task_gate {
         u8 dpl :2;
         u8 p :1;
 	u16 resv_2;
-} *gate = (void*)&gdt32[TASK_GATE >>3];
+} *gate = NULL;
 
-//#define dbg_printf(...)	printf(__VA_ARGS__)
-#define dbg_printf(...)
+#define dbg_printf(...)	printf(__VA_ARGS__)
+//#define dbg_printf(...)
 
 static unsigned long rip_skip = 0;
 
@@ -88,7 +89,8 @@ void reset_gate(void)
 	gate->type = 0x5;
 	gate->p = 1;
 	gate->dpl = 2;
-	gate->selector = TARGET_TSS;
+	//gate->selector = TARGET_TSS;
+	gate->selector = 0x1008;
 }
 
 void reset_desc(void)
@@ -251,13 +253,14 @@ void cond_12_desc_tss_readonly(int violation)
 		/* should #pF */
 		//rip_skip = 7;
 		//readonly_tss->ss0 = 0x11;
-
+/*
 		dbg_printf("ss0: %x %x\n"
 			"ss1: %x %x\n"
 			"ss2: %x %x\n",
 			readonly_tss->ss0, target_tss->ss0,
 			readonly_tss->ss1, target_tss->ss1,
 			readonly_tss->ss2, target_tss->ss2);
+*/
 	}
 }
 
@@ -329,9 +332,16 @@ void test_cond(u32 vmap)
 	do_less_privilege(far_call_task_gate, NULL, 2);
 }
 
+struct descriptor_table_ptr old_gdt_desc;
+struct descriptor_table_ptr new_gdt_desc;
+
+extern gdt_entry_t *new_gdt;
+
 int main(int ac, char **av)
 {
 	u32 vmap = 0;
+	//char *str = NULL;
+	void *gdt_page = NULL;
 
 	setup_vm();
 	setup_idt();
@@ -345,19 +355,57 @@ int main(int ac, char **av)
 
 	desc_intr_backup = *desc_intr;
 	desc_cur_backup = *desc_main;
-
+/*
 	for (vmap = 0x0; vmap <  (0x1 <<NCOND); vmap ++) {
 		reset_gate();
 		reset_desc();
 		test_cond(vmap);
 	}
 
-/*
+
 	for (vmap = 0x0;vmap < NCOND;vmap ++) {
 		reset_gate();
 		reset_desc();
 		test_cond(0x1<<vmap);
 	}
 */
+	
+	gdt_page =  alloc_page(); /*alloc 1 page */
+#define GDT_PAGE        ((void*)(ERROR_ADDR + 0x2000))
+	install_pages(phys_to_virt(read_cr3()), (u32)gdt_page, PAGE_SIZE, GDT_PAGE);
+	new_gdt = GDT_PAGE;
+
+	sgdt(&old_gdt_desc);
+	printf("gdt32(%x) gdt: %lx  limit:%x\n", (u32)gdt32, old_gdt_desc.base, old_gdt_desc.limit);
+
+	memset(new_gdt, 0, PAGE_SIZE);
+	memcpy(new_gdt, gdt32, old_gdt_desc.limit);
+	printf("alloc gdt page at: %x\n", (u32)new_gdt);
+
+	new_gdt_desc.base = (u32)new_gdt;
+	new_gdt_desc.limit = PAGE_SIZE * 2;
+	lgdt(&new_gdt_desc);
+	sgdt(&old_gdt_desc);
+	printf("gdt32(%x) gdt: %lx  limit:%x\n", (u32)gdt32, old_gdt_desc.base, old_gdt_desc.limit);
+
+	desc_intr = (void*)&new_gdt[TSS_INTR >>3],
+  	desc_main = (void*)&new_gdt[TSS_MAIN >>3],
+  	desc_target = (void*)&new_gdt[TARGET_TSS >>3];
+	gate = (void*)&new_gdt[TASK_GATE >>3];
+
+	desc_intr_backup = *desc_intr;
+	desc_cur_backup = *desc_main;
+
+	/* make sure #PF */
+	/*
+	str = (void*)new_gdt + 0x1000;
+	rip_skip = 7;
+	str[128] = 'h';
+	printf("str[128]:%c\n", str[128]);
+	*/
+	reset_gate();
+	reset_desc();
+	test_cond(vmap);
+
 	return 0;
 }
